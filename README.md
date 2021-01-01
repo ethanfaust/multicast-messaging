@@ -18,4 +18,6 @@ OS name: "linux", version: "5.8.0-7630-generic", arch: "amd64", family: "unix"
 ```
 
 ## How to run
+```
 java -cp target/collab-1.0-SNAPSHOT.jar dev.efaust.collab.Collab
+```
