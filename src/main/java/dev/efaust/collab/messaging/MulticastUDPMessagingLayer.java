@@ -67,7 +67,7 @@ public class MulticastUDPMessagingLayer implements MessagingLayer, Runnable {
             if (deserializedMessage.isPresent()) {
                 success = true;
                 Message message = deserializedMessage.get();
-                message.sourceAddress = src.getHostAddress();
+                message.setSourceAddress(src.getHostAddress());
                 receiveQueue.add(message);
             }
         }

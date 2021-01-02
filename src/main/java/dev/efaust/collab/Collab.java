@@ -168,7 +168,7 @@ public class Collab {
         while (true) {
             Message message = receiveQueue.poll();
             if (message != null) {
-                log.debug("received message {} from {}", message, message.sourceAddress);
+                log.debug("received message {} from {}", message, message.getSourceAddress());
                 paxosNode.receiveMessage(message);
             }
             try {

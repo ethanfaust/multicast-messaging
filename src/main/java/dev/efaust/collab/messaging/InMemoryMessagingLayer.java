@@ -4,6 +4,11 @@ import java.io.IOException;
 import java.util.Queue;
 import java.util.concurrent.LinkedBlockingQueue;
 
+/**
+ * Object to facilitate in memory simulation of nodes.
+ * Each node has a send queue and receive queue.
+ * InMemoryInterconnect can link these together.
+ */
 public class InMemoryMessagingLayer implements MessagingLayer {
     private String nodeId;
     private Queue<Message> sendQueue;

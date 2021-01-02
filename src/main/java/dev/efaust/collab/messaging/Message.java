@@ -4,11 +4,13 @@ import dev.efaust.collab.MessageType;
 import lombok.Getter;
 import lombok.Setter;
 
+/**
+ * Base class for all messages.
+ * This is the Java representation, these might be serialized and put on the wire as UDP packets.
+ */
 public abstract class Message implements Cloneable {
-    public byte[] bytes;
-
     @Getter @Setter
-    public String sourceAddress;
+    private String sourceAddress;
 
     public abstract MessageType getMessageType();
 

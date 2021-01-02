@@ -8,7 +8,15 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.Optional;
 
+/**
+ * Convert in memory Java objects to byte representation to be sent in UDP packets.
+ */
 public class MessageSerialization {
+    /**
+     *  The current implementation is very basic.
+     *  This is probably better done with something like Protocol Buffers.
+     */
+
     Logger log = LogManager.getLogger(MessageSerialization.class);
 
     // wire format:

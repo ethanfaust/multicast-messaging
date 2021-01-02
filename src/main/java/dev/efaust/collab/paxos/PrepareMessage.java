@@ -1,14 +1,12 @@
 package dev.efaust.collab.paxos;
 
 import dev.efaust.collab.MessageType;
-import dev.efaust.collab.paxos.PaxosMessage;
 import lombok.Getter;
 import lombok.Setter;
 
 public class PrepareMessage extends PaxosMessage {
-    // names according to convention here: https://en.wikipedia.org/wiki/Paxos_%28computer_science%29#Basic_Paxos
     @Getter @Setter
-    private long n;
+    private long proposalNumber;
 
     public PrepareMessage() {
         // default constructor, empty
@@ -18,9 +16,9 @@ public class PrepareMessage extends PaxosMessage {
         super(executionId);
     }
 
-    public PrepareMessage(long executionId, long n) {
+    public PrepareMessage(long executionId, long proposalNumber) {
         this(executionId);
-        this.n = n;
+        this.proposalNumber = proposalNumber;
     }
 
     @Override
@@ -30,6 +28,6 @@ public class PrepareMessage extends PaxosMessage {
 
     @Override
     public String toString() {
-        return String.format("<Prepare src='%s' executionId='%d', n='%d' />", getSourceAddress(), getExecutionId(), getN());
+        return String.format("<Prepare src='%s' executionId='%d', N='%d' />", getSourceAddress(), getExecutionId(), getProposalNumber());
     }
 }

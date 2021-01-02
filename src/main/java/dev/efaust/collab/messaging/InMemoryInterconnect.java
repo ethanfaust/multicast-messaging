@@ -9,6 +9,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Enable simulation of a network of nodes. Each node has a send queue and a receive queue.
+ * This interconnect facilitates exchange of messages by taking messages from each node's send queue
+ * and propagating to all other receive queues.
+ */
 public class InMemoryInterconnect {
     private static Logger log = LogManager.getLogger(InMemoryInterconnect.class);
 
@@ -35,7 +40,7 @@ public class InMemoryInterconnect {
                 } catch (CloneNotSupportedException e) {
                     throw new IOException(e);
                 }
-                receivedMessage.sourceAddress = send.getNodeId();
+                receivedMessage.setSourceAddress(send.getNodeId());
                 receive.getReceiveQueue().add(receivedMessage);
             }
         }

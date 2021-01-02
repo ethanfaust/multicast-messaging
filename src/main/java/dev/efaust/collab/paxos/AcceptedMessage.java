@@ -1,13 +1,12 @@
 package dev.efaust.collab.paxos;
 
 import dev.efaust.collab.MessageType;
-import dev.efaust.collab.paxos.PaxosMessage;
 import lombok.Getter;
 import lombok.Setter;
 
 public class AcceptedMessage extends PaxosMessage {
     @Getter @Setter
-    private long acceptedN;
+    private long acceptedProposalNumber;
 
     @Getter @Setter
     private long acceptedValue;
@@ -19,7 +18,7 @@ public class AcceptedMessage extends PaxosMessage {
 
     @Override
     public String toString() {
-        return String.format("<Accepted src='%s' executionId='%d', acceptedN='%d' acceptedValue='%d' />",
-                getSourceAddress(), getExecutionId(), getAcceptedN(), getAcceptedValue());
+        return String.format("<Accepted src='%s' executionId='%d', N='%d' V='%d' />",
+                getSourceAddress(), getExecutionId(), getAcceptedProposalNumber(), getAcceptedValue());
     }
 }

@@ -1,20 +1,23 @@
 package dev.efaust.collab.paxos;
 
 import dev.efaust.collab.MessageType;
-import dev.efaust.collab.paxos.PaxosMessage;
 import lombok.Getter;
 import lombok.Setter;
 
+/**
+ * With a promise message, a node guarantees that it will not accept future proposals with number < N
+ * (promiseProposalNumber).
+ */
 public class PromiseMessage extends PaxosMessage {
     // TODO: fix this: currently these sentinel values are part of the field
     public static final long NO_PRIOR_ACCEPTED_N = -1;
     public static final long NO_PRIOR_ACCEPTED_VALUE = -1;
 
     @Getter @Setter
-    private long promiseN;
+    private long promiseProposalNumber;
 
     @Getter @Setter
-    private long priorAcceptedN;
+    private long priorAcceptedProposalNumber;
 
     @Getter @Setter
     private long priorAcceptedValue;
@@ -23,10 +26,10 @@ public class PromiseMessage extends PaxosMessage {
         super();
     }
 
-    public PromiseMessage(long executionId, long promiseN, long priorAcceptedN, long priorAcceptedValue) {
+    public PromiseMessage(long executionId, long promiseProposalNumber, long priorAcceptedProposalNumber, long priorAcceptedValue) {
         super(executionId);
-        this.promiseN = promiseN;
-        this.priorAcceptedN = priorAcceptedN;
+        this.promiseProposalNumber = promiseProposalNumber;
+        this.priorAcceptedProposalNumber = priorAcceptedProposalNumber;
         this.priorAcceptedValue = priorAcceptedValue;
     }
 
@@ -38,6 +41,6 @@ public class PromiseMessage extends PaxosMessage {
     @Override
     public String toString() {
         return String.format("<Promise src='%s' executionId='%d', promiseN='%d' priorAcceptedN='%d' priorAcceptedValue='%d' />",
-                getSourceAddress(), getExecutionId(), getPromiseN(), getPriorAcceptedN(), getPriorAcceptedValue());
+                getSourceAddress(), getExecutionId(), getPromiseProposalNumber(), getPriorAcceptedProposalNumber(), getPriorAcceptedValue());
     }
 }
