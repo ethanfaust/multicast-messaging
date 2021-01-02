@@ -3,13 +3,13 @@ package dev.efaust.collab;
 import dev.efaust.collab.Message;
 import dev.efaust.collab.MessageType;
 
-public class PromiseMessage extends Message {
+public class AcceptMessage extends Message {
     private long executionId;
-    private long m;
-    private long w;
+    private long n;
+    private long v;
 
     @Override
     public MessageType getMessageType() {
-        return MessageType.Promise;
+        return MessageType.Accept;
     }
 }

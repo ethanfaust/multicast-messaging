@@ -20,6 +20,15 @@ public class Collab {
     private static final String OPTION_IPV4 = "ipv4";
     private static final String OPTION_HELP = "help";
 
+    private static final int PORT_DEFAULT = 4447;
+
+    // IPv4: Pick anything in 224.0.0.0 to 224.0.0.255
+    // https://en.wikipedia.org/wiki/Multicast_address#IPv4
+    private static final String IPV4_DEFAULT_ADDRESS = "224.69.69.43";
+
+    // https://en.wikipedia.org/wiki/Multicast_address#IPv6
+    private static final String IPV6_DEFAULT_ADDRESS = "ff02::1";
+
     long DISCOVERY_PERIOD_MILLIS = TimeUnit.SECONDS.toMillis(3);
     String SERVICE_NAME = "Collab";
 
@@ -64,7 +73,7 @@ public class Collab {
         // debug with sudo tcpdump 'port 4447'
         // ubuntu: sudo ufw allow 4447/udp
         // fedora: sudo firewall-cmd --add-port 4447/udp
-        int port = 4447;
+        int port = PORT_DEFAULT;
         boolean useIpv6 = true;
 
         if (cmd.hasOption(OPTION_HELP)) {
@@ -78,14 +87,10 @@ public class Collab {
             useIpv6 = false;
         }
 
-        // IPv4: Pick anything in 224.0.0.0 to 224.0.0.255
-        // https://en.wikipedia.org/wiki/Multicast_address#IPv4
-        String ipv4Default = "224.69.69.43";
-        // IPv6: ff02::1
-        // https://en.wikipedia.org/wiki/Multicast_address#IPv6
-        String ipv6Default = "ff02::1";
+        // could make this configurable... doesn't really matter since network local multicast by convention uses
+        // a single address (IPv6), with any port
+        String multicastGroupAddress = useIpv6 ? IPV6_DEFAULT_ADDRESS : IPV4_DEFAULT_ADDRESS;
 
-        String multicastGroupAddress = useIpv6 ? ipv6Default : ipv4Default;
         execute(multicastGroupAddress, port);
     }
 
