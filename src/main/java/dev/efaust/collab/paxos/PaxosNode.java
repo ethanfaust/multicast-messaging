@@ -80,7 +80,14 @@ public class PaxosNode {
         ExecutionState state = ensureExecutionStateExists(executionId);
         long messageN = prepare.getProposalNumber();
         long priorN = state.getPriorPrepareN();
+        log.info("[{}] received prepare, message N: {}, prior N: {}", nodeId, messageN, priorN);
+
+        boolean messageProposalNumberGreaterThanPreviouslyReceived = messageN > priorN;
+        boolean messageFromSelf = nodeId.equals(prepare.getSourceAddress());
+
         if (messageN > priorN) {
+            log.info("[{}] message N is greater, making promise", nodeId);
+
             // return promise
             state.setPriorPrepareN(messageN);
 
@@ -91,6 +98,8 @@ public class PaxosNode {
             promise.setPriorAcceptedValue(state.getAcceptedValue().orElse(PromiseMessage.NO_PRIOR_ACCEPTED_VALUE));
             sendMessage(promise);
         } else {
+            log.info("[{}] message N is not greater, not making promise", nodeId);
+
             // return negative promise
             NegativePromiseMessage negativePromise = new NegativePromiseMessage();
             negativePromise.setExecutionId(executionId);
@@ -192,12 +201,19 @@ public class PaxosNode {
     public void sendPrepare(long executionId) throws IOException {
         ExecutionState state = ensureExecutionStateExists(executionId);
         long prepareN = state.getPriorPrepareN() + 1;
-        state.setPriorPrepareN(prepareN);
+
+        // this is done on receiving our own message
+        //state.setPriorPrepareN(prepareN);
+        // TODO: what if we don't receive our own message?
+        // solution 1: if src=us and dst=us, bypass message channel and execute state machine directly?
+        // solution 2: model prepare/promise state separately, ignore NegativePromise from self
+
         sendMessage(new PrepareMessage(executionId, prepareN));
     }
 
     public void sendMessage(Message message) throws IOException {
         messagingLayer.send(message);
+        log.info("[{}] sent {}", nodeId, message);
     }
 
     public PeerRegistry getPeerRegistry() {

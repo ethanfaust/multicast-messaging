@@ -1,5 +1,6 @@
 package dev.efaust.collab.messaging;
 
+import lombok.Getter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -19,29 +20,47 @@ public class InMemoryInterconnect {
 
     private List<InMemoryMessagingLayer> nodes;
 
+    @Getter
+    private List<MessageHistoryEntry> history;
+
     public InMemoryInterconnect() {
         this.nodes = new ArrayList<>();
+        this.history = new ArrayList<>();
     }
 
     public void addNode(InMemoryMessagingLayer node) {
         this.nodes.add(node);
     }
 
+    private Message setMessageSrcAddress(Message message, String srcNodeId) throws IOException {
+        Message sentMessage = null;
+        try {
+            sentMessage = (Message)message.clone();
+        } catch (CloneNotSupportedException e) {
+            throw new IOException(e);
+        }
+        sentMessage.setSourceAddress(srcNodeId);
+        return sentMessage;
+    }
+
+    // TODO: add dropped messages, random reordering, etc.
     public void exchangeMessagesOnce() throws IOException {
         for (InMemoryMessagingLayer send : nodes) {
             Message message = send.getSendQueue().poll();
             if (message == null) {
                 continue;
             }
+            Message sentMessage = setMessageSrcAddress(message, send.getNodeId());
+
             for (InMemoryMessagingLayer receive : nodes) {
-                Message receivedMessage = null;
-                try {
-                    receivedMessage = (Message)message.clone();
-                } catch (CloneNotSupportedException e) {
-                    throw new IOException(e);
-                }
-                receivedMessage.setSourceAddress(send.getNodeId());
-                receive.getReceiveQueue().add(receivedMessage);
+                receive.getReceiveQueue().add(sentMessage);
+
+                // Record history entry with src, dst, message
+                MessageHistoryEntry historyEntry = new MessageHistoryEntry();
+                historyEntry.setSrcNode(send.getNodeId());
+                historyEntry.setDstNode(receive.getNodeId());
+                historyEntry.setMessage(sentMessage);
+                history.add(historyEntry);
             }
         }
     }
