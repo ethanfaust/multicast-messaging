@@ -40,6 +40,9 @@ public class MulticastUDPMessagingLayer implements MessagingLayer, Runnable {
 
     @Override
     public void run() {
+        if (socket == null) {
+            throw new IllegalStateException("must call setup before run");
+        }
         byte[] buf = new byte[MESSAGE_BUFFER_SIZE_BYTES];
         DatagramPacket packet = new DatagramPacket(buf, buf.length);
         log.info("starting receive");
@@ -83,6 +86,7 @@ public class MulticastUDPMessagingLayer implements MessagingLayer, Runnable {
         socket.setReuseAddress(true);
         groupAddress = InetAddress.getByName(ip);
         log.info("using multicast group address {}, port {}", groupAddress.getHostAddress(), port);
+        log.info("note: if this node is not receiving messages, please validate that {}/udp is allowed through your firewall", port);
         socketAddress = new InetSocketAddress(groupAddress, port);
         socket.joinGroup(socketAddress, null);
         log.info("setup complete");
