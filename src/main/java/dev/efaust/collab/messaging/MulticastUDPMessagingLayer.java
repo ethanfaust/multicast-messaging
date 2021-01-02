@@ -1,4 +1,4 @@
-package dev.efaust.collab;
+package dev.efaust.collab.messaging;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

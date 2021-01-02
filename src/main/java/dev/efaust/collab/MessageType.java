@@ -1,15 +1,20 @@
 package dev.efaust.collab;
 
+import lombok.Getter;
+
 import java.util.Optional;
 
 public enum MessageType {
     Heartbeat(0),
     Prepare(1),
     Promise(2),
-    Accept(3),
-    Accepted(4);
+    PleaseAccept(3),
+    Accepted(4),
+    NegativePromise(5);
 
+    @Getter
     byte id;
+
     MessageType(int id) {
         this.id = (byte)id;
     }

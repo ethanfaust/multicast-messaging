@@ -1,6 +1,6 @@
-package dev.efaust.collab;
+package dev.efaust.collab.messaging;
 
-import dev.efaust.collab.Message;
+import dev.efaust.collab.messaging.Message;
 
 import java.io.IOException;
 import java.util.Queue;

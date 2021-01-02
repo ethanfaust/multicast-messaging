@@ -1,5 +1,8 @@
-package dev.efaust.collab;
+package dev.efaust.collab.messaging;
 
+import dev.efaust.collab.MessageType;
+import dev.efaust.collab.liveness.HeartbeatMessage;
+import dev.efaust.collab.messaging.MessageSerialization;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,7 +27,7 @@ public class MessageSerializationTest {
             expected[i] = MessageSerialization.MAGIC[i];
         }
         expected[MessageSerialization.MAGIC.length] = MessageSerialization.VERSION;
-        expected[MessageSerialization.MAGIC.length] = MessageType.Heartbeat.id;
+        expected[MessageSerialization.MAGIC.length] = MessageType.Heartbeat.getId();
 
         Assertions.assertArrayEquals(expected, bytes);
     }

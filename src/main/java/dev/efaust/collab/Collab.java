@@ -1,5 +1,11 @@
 package dev.efaust.collab;
 
+import dev.efaust.collab.liveness.HeartbeatMessage;
+import dev.efaust.collab.liveness.PeerRegistry;
+import dev.efaust.collab.messaging.Message;
+import dev.efaust.collab.messaging.MessageSerialization;
+import dev.efaust.collab.messaging.MulticastUDPMessagingLayer;
+import dev.efaust.collab.paxos.PaxosNode;
 import org.apache.commons.cli.*;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -7,7 +13,6 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.config.Configurator;
 import org.apache.logging.log4j.core.config.DefaultConfiguration;
 import org.joda.time.DateTime;
-import org.joda.time.DateTimeZone;
 
 import java.io.IOException;
 import java.util.Queue;
@@ -95,9 +100,12 @@ public class Collab {
     }
 
     public void execute(String ip, int port) throws IOException {
-        PeerRegistry peerRegistry = new PeerRegistry();
         MessageSerialization messageSerialization = new MessageSerialization();
         MulticastUDPMessagingLayer multicast = new MulticastUDPMessagingLayer(ip, port, messageSerialization);
+
+        // TODO: use hostname, ip, or (host, startupTime) as nodeId
+        PaxosNode paxosNode = new PaxosNode("A", multicast);
+
         multicast.setup();
 
         log.info("starting receive thread");
@@ -147,6 +155,7 @@ public class Collab {
             @Override
             public void run() {
                 log.info("peer list");
+                PeerRegistry peerRegistry = paxosNode.getPeerRegistry();
                 for (String peer : peerRegistry.getPeers()) {
                     DateTime lastHeartbeat = peerRegistry.getLastHeartbeatForPeer(peer);
                     log.info("peer {} last heartbeat {}", peer, lastHeartbeat);
@@ -159,10 +168,8 @@ public class Collab {
         while (true) {
             Message message = receiveQueue.poll();
             if (message != null) {
-                log.info("received message {} from {}", message, message.sourceAddress);
-                if (message instanceof HeartbeatMessage) {
-                    peerRegistry.updatePeerHeartbeat(message.sourceAddress, DateTime.now(DateTimeZone.UTC));
-                }
+                log.debug("received message {} from {}", message, message.sourceAddress);
+                paxosNode.receiveMessage(message);
             }
             try {
                 Thread.sleep(10);

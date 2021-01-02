@@ -1,5 +1,7 @@
-package dev.efaust.collab;
+package dev.efaust.collab.messaging;
 
+import dev.efaust.collab.MessageType;
+import dev.efaust.collab.liveness.HeartbeatMessage;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -33,7 +35,7 @@ public class MessageSerialization {
             bytes[i] = MAGIC[i];
         }
         bytes[MAGIC.length] = VERSION;
-        bytes[MAGIC.length + 1] = messageType.id;
+        bytes[MAGIC.length + 1] = messageType.getId();
 
         // TODO: serialization support for other message types
 

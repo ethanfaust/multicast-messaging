@@ -1,4 +1,4 @@
-package dev.efaust.collab;
+package dev.efaust.collab.liveness;
 
 import org.joda.time.DateTime;
 
