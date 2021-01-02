@@ -48,9 +48,9 @@ public class InMemoryInterconnect {
         while (true) {
             exchangeMessagesOnce();
             updateQueueDrainStatus(queuesDrained);
-            log.info("queues drained: {}", queuesDrained);
+            log.debug("queues drained: {}", queuesDrained);
             boolean allQueuesDrained = !queuesDrained.containsValue(false);
-            log.info("allQueuesDrained: {}", allQueuesDrained);
+            log.debug("allQueuesDrained: {}", allQueuesDrained);
             if (allQueuesDrained) {
                 break;
             }

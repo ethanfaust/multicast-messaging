@@ -24,4 +24,9 @@ public class PeerRegistry {
     public DateTime getLastHeartbeatForPeer(String peer) {
         return peerLastHeartbeatTime.get(peer);
     }
+
+    public Set<String> peersAlive() {
+        // TODO: add liveness threshold
+        return peerLastHeartbeatTime.keySet();
+    }
 }

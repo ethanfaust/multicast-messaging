@@ -16,4 +16,10 @@ public class PleaseAcceptMessage extends PaxosMessage {
     public MessageType getMessageType() {
         return MessageType.PleaseAccept;
     }
+
+    @Override
+    public String toString() {
+        return String.format("<PleaseAccept src='%s' executionId='%d', pleaseAcceptN='%d' valueToAccept='%d' />",
+                getSourceAddress(), getExecutionId(), getPleaseAcceptN(), getValueToAccept());
+    }
 }

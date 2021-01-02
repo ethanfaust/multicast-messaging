@@ -6,6 +6,10 @@ import lombok.Getter;
 import lombok.Setter;
 
 public class PromiseMessage extends PaxosMessage {
+    // TODO: fix this: currently these sentinel values are part of the field
+    public static final long NO_PRIOR_ACCEPTED_N = -1;
+    public static final long NO_PRIOR_ACCEPTED_VALUE = -1;
+
     @Getter @Setter
     private long promiseN;
 

@@ -14,8 +14,12 @@ public class PrepareMessage extends PaxosMessage {
         // default constructor, empty
     }
 
-    public PrepareMessage(long executionId, long n) {
+    public PrepareMessage(long executionId) {
         super(executionId);
+    }
+
+    public PrepareMessage(long executionId, long n) {
+        this(executionId);
         this.n = n;
     }
 

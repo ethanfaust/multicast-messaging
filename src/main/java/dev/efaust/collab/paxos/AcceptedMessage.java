@@ -16,4 +16,10 @@ public class AcceptedMessage extends PaxosMessage {
     public MessageType getMessageType() {
         return MessageType.Accepted;
     }
+
+    @Override
+    public String toString() {
+        return String.format("<Accepted src='%s' executionId='%d', acceptedN='%d' acceptedValue='%d' />",
+                getSourceAddress(), getExecutionId(), getAcceptedN(), getAcceptedValue());
+    }
 }
