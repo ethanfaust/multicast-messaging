@@ -1,10 +1,7 @@
 package dev.efaust.collab;
 
 import dev.efaust.collab.liveness.HeartbeatMessage;
-import dev.efaust.collab.messaging.InMemoryInterconnect;
-import dev.efaust.collab.messaging.InMemoryMessagingLayer;
-import dev.efaust.collab.messaging.MessageHistoryEntry;
-import dev.efaust.collab.messaging.MessagingLayer;
+import dev.efaust.collab.messaging.*;
 import dev.efaust.collab.paxos.PaxosNode;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -15,9 +12,7 @@ import org.apache.logging.log4j.core.config.DefaultConfiguration;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -25,9 +20,22 @@ import java.util.stream.Collectors;
 public class Repl {
     private static final Logger log = LogManager.getLogger(Repl.class);
 
+    private static final String COMMAND_SETUP = "setup";
+    private static final String COMMAND_CREATE = "create";
+    private static final String COMMAND_HEARTBEATS = "heartbeats";
+    private static final String COMMAND_HELP = "help";
+    private static final String COMMAND_HISTORY = "history";
+    private static final Pattern SENT_COMMAND = Pattern.compile("^([0-9]+).sent$");
+    private static final Pattern STEP_COMMAND = Pattern.compile("^([0-9]+)$");
+    private static final Pattern NEW_COMMAND = Pattern.compile("^([0-9]+).new$");
+    private static final Pattern PREPARE_COMMAND = Pattern.compile("^([0-9]+).prepare$");
+    private static final Pattern RECEIVED_COMMAND = Pattern.compile("^([0-9]+).received$");
+    private static final Pattern MESSAGES_COMMAND = Pattern.compile("^([0-9]+).messages$");
+
     private InMemoryInterconnect interconnect;
     private Map<Integer, InMemoryMessagingLayer> messagingLayers = new HashMap<>();
     private Map<Integer, PaxosNode> nodes = new HashMap<>();
+    private List<String> commandLog = new ArrayList<>();
 
     public static void main(String[] args) {
         Configurator.initialize(new DefaultConfiguration());
@@ -62,19 +70,16 @@ public class Repl {
         log.info("heartbeats transmitted from all nodes");
     }
 
-    Pattern STEP_COMMAND = Pattern.compile("^([0-9]+)$");
     public void step(Integer nodeId) throws IOException {
         nodes.get(nodeId).receiveMessages();
         interconnect.drainQueues();
     }
 
-    Pattern NEW_COMMAND = Pattern.compile("^([0-9]+).new$");
     public void prepareNew(Integer nodeId) throws IOException {
         nodes.get(nodeId).sendPrepare(() -> (long)nodeId);
         interconnect.drainQueues();
     }
 
-    Pattern PREPARE_COMMAND = Pattern.compile("^([0-9]+).prepare$");
     public void prepare(Integer nodeId) throws IOException {
         nodes.get(nodeId).sendPrepare(1, () -> (long)nodeId);
         interconnect.drainQueues();
@@ -88,7 +93,6 @@ public class Repl {
         }
     }
 
-    Pattern SENT_COMMAND = Pattern.compile("^([0-9]+).sent$");
     public void sent(Integer nodeId) throws IOException {
         List<MessageHistoryEntry> entries = interconnect.getHistory().stream()
                 .filter((e) -> nodeAddress(nodeId).equals(e.getSrcNode()))
@@ -96,7 +100,6 @@ public class Repl {
         printHistoryEntries(entries);
     }
 
-    Pattern RECEIVED_COMMAND = Pattern.compile("^([0-9]+).received$");
     public void received(Integer nodeId) throws IOException {
         List<MessageHistoryEntry> entries = interconnect.getHistory().stream()
                 .filter((e) -> nodeAddress(nodeId).equals(e.getDstNode()))
@@ -104,7 +107,6 @@ public class Repl {
         printHistoryEntries(entries);
     }
 
-    Pattern MESSAGES_COMMAND = Pattern.compile("^([0-9]+).messages$");
     public void messages(Integer nodeId) throws IOException {
         List<MessageHistoryEntry> entries = interconnect.getHistory().stream()
                 .filter((e) -> nodeAddress(nodeId).equals(e.getSrcNode()) || nodeAddress(nodeId).equals(e.getDstNode()))
@@ -113,12 +115,70 @@ public class Repl {
     }
 
     public void help() {
-        System.out.println("paxos repl");
-        System.out.println("  available commands:");
-        System.out.println("      create - create new node");
-        System.out.println("      heartbeats - send heartbeats from all nodes");
-        System.out.println("      N (e.g. 1) - receive messages for node N, process");
-        System.out.println("      N.prepare (e.g. 1.prepare) - send prepare from node N");
+        System.out.println("*** paxos repl ***");
+        System.out.println("available commands:");
+        System.out.println("    create - create new node");
+        System.out.println("    heartbeats - send heartbeats from all nodes");
+        System.out.println("    N (e.g. 1) - receive messages for node N, process");
+        System.out.println("        there is an option to interactively reorder/drop messages prior to delivery");
+        System.out.println("    N.new (e.g. 1.new) - send prepare from node N for new session");
+        System.out.println("    N.prepare (e.g. 1.prepare) - send prepare from node N for existing session");
+        System.out.println("    N.sent (e.g. 1.sent) - list all messages sent by node N");
+        System.out.println("    N.received (e.g. 1.received) - list all messages sent by node N");
+        System.out.println("    N.messages (e.g. 1.messages) - list all messages sent or received by node N");
+        System.out.println("    history - list prior mutating commands");
+
+    }
+
+    private void printReceiveQueue(Queue<Message> queue) {
+        List<Message> messages = queue.stream().collect(Collectors.toList());
+        int i = 0;
+        for (Message msg : messages) {
+            System.out.println(String.format("  [%d] %s", i, msg));
+            i++;
+        }
+    }
+
+    private void interactiveReorder(BufferedReader reader, Queue<Message> queue) throws IOException {
+        System.out.println("enter new order by index, e.g. 2 0 1");
+        System.out.println("indices not included will be dropped");
+        System.out.print("new order: ");
+        String newOrderResponse = reader.readLine().strip();
+        List<Integer> newOrder = Arrays.asList(newOrderResponse.split(" ")).stream().map(Integer::parseInt).collect(Collectors.toList());
+        List<Message> messages = queue.stream().collect(Collectors.toList());
+        queue.clear();
+        for (int index : newOrder) {
+            queue.add(messages.get(index));
+        }
+        System.out.println("reordered/dropped messages, new receive queue:");
+        printReceiveQueue(queue);
+        commandLog.add(String.format("  reorder %s", newOrderResponse));
+    }
+
+    private void history() {
+        int i = 0;
+        for (String command : commandLog) {
+            System.out.println(String.format("[%d] %s", i, command));
+            i++;
+        }
+    }
+
+    private void defaultSetup() throws IOException {
+        create();
+        commandLog.add(COMMAND_CREATE);
+        create();
+        commandLog.add(COMMAND_CREATE);
+        create();
+        commandLog.add(COMMAND_CREATE);
+        heartbeats();
+        commandLog.add(COMMAND_HEARTBEATS);
+        step(1);
+        commandLog.add("1");
+        step(2);
+        commandLog.add("2");
+        step(3);
+        commandLog.add("3");
+        log.info("default setup complete, 3 node cluster, heartbeats exchanged");
     }
 
     public void run() {
@@ -126,32 +186,47 @@ public class Repl {
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
         Matcher matcher;
 
+        help();
+        System.out.println("typical invocation: setup / 1.new");
+
         while (true) {
             System.out.print("> ");
             try {
                 String input = reader.readLine().strip();
+                boolean log = true;
 
-                if ("help".equals(input)) {
+                if (COMMAND_HELP.equals(input)) {
+                    log = false;
                     help();
-                } else if ("create".equals(input)) {
+                } else if (COMMAND_HISTORY.equals(input)) {
+                    log = false;
+                    history();
+                } else if (COMMAND_SETUP.equals(input)) {
+                    log = false;
+                    defaultSetup();
+                } else if (COMMAND_CREATE.equals(input)) {
                     create();
-                } else if ("heartbeats".equals(input)) {
+                } else if (COMMAND_HEARTBEATS.equals(input)) {
                     heartbeats();
                 } else if ((matcher = STEP_COMMAND.matcher(input)).matches()) {
                     Integer nodeId = Integer.parseInt(matcher.group(1));
                     MessagingLayer messagingLayer = messagingLayers.get(nodeId);
 
+                    // need to add custom log entries for reordering
+                    log = false;
+                    commandLog.add(input);
+
                     if (messagingLayer.getReceiveQueue().isEmpty()) {
                         System.out.println(String.format("[%d] receive queue empty", nodeId));
                     } else {
                         System.out.println(String.format("[%d] receive queue", nodeId));
-                        messagingLayer.getReceiveQueue().stream().forEachOrdered(msg -> {
-                            System.out.println(String.format("  %s", msg));
-                        });
-
-                        System.out.println("  (press enter to continue)");
-                        // TODO: add interactive option for message reordering / dropping instead
-                        reader.readLine();
+                        Queue<Message> receiveQueue = messagingLayer.getReceiveQueue();
+                        printReceiveQueue(receiveQueue);
+                        System.out.print("  reorder/drop messages [N/y]? ");
+                        String response = reader.readLine().strip();
+                        if (response.equalsIgnoreCase("y")) {
+                            interactiveReorder(reader, receiveQueue);
+                        }
                     }
 
                     step(nodeId);
@@ -162,15 +237,25 @@ public class Repl {
                     Integer nodeId = Integer.parseInt(matcher.group(1));
                     prepare(nodeId);
                 } else if ((matcher = SENT_COMMAND.matcher(input)).matches()) {
+                    log = false;
                     Integer nodeId = Integer.parseInt(matcher.group(1));
                     sent(nodeId);
                 } else if ((matcher = RECEIVED_COMMAND.matcher(input)).matches()) {
+                    log = false;
                     Integer nodeId = Integer.parseInt(matcher.group(1));
                     received(nodeId);
                 } else if ((matcher = MESSAGES_COMMAND.matcher(input)).matches()) {
+                    log = false;
                     Integer nodeId = Integer.parseInt(matcher.group(1));
                     messages(nodeId);
+                } else {
+                    log = false;
+                    System.out.println(String.format("unknown command: %s", input));
                 }
+                if (log) {
+                    commandLog.add(input);
+                }
+
             } catch (Exception e) {
                 log.error("unhandled exception", e);
             }

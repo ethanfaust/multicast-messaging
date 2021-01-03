@@ -125,6 +125,7 @@ public class PaxosNode {
         state.getPromises().put(promise.getSourceAddress(), promise);
 
         // need a majority of promises from a quorum of acceptors to proceed
+        // TODO: does this need to be for N?
         if (!haveMajorityOfPromises(state)) {
             log.info("[{}] do not yet have a majority of promises, cannot proceed with accept", nodeId);
             return;

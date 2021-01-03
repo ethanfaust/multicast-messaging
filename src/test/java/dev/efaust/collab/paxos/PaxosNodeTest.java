@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableSet;
 import dev.efaust.collab.liveness.HeartbeatMessage;
 import dev.efaust.collab.messaging.InMemoryInterconnect;
 import dev.efaust.collab.messaging.InMemoryMessagingLayer;
+import dev.efaust.collab.messaging.Message;
 import dev.efaust.collab.messaging.MessageHistoryEntry;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -13,8 +14,7 @@ import org.apache.logging.log4j.core.config.DefaultConfiguration;
 import org.junit.jupiter.api.*;
 
 import java.io.IOException;
-import java.util.Random;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class PaxosNodeTest {
@@ -74,7 +74,7 @@ public class PaxosNodeTest {
     @Test
     public void testStandardPrepare() throws IOException {
         // send prepare to kick off a round
-        long executionId = a.sendPrepare(this::chooseValue);
+        long executionId = a.sendPrepare(() -> 2L);
         interconnect.drainQueues();
 
         // receive prepare, process, send promise
@@ -109,44 +109,120 @@ public class PaxosNodeTest {
         Assertions.assertEquals(ALL, nodesThatSentPromise);
     }
 
-    private long chooseValue() {
-        // TODO: make this something useful
-        return new Random().nextInt(100);
+    // note: this will also drop messages if the message source is not in the list
+    protected void reorderReceiveQueueBySrc(InMemoryMessagingLayer messagingLayer, List<String> desiredOrder) {
+        Queue<Message> receiveQueue = messagingLayer.getReceiveQueue();
+        List<Message> messages = receiveQueue.stream().collect(Collectors.toList());
+        List<Message> newOrder = new ArrayList<>();
+        for (String nodeId : desiredOrder) {
+            messages.stream()
+                    .filter((msg) -> nodeId.equals((msg.getSourceAddress())))
+                    .forEach((msg) -> newOrder.add(msg));
+        }
+        messagingLayer.getReceiveQueue().clear();
+        for (Message msg : newOrder) {
+            receiveQueue.add(msg);
+        }
+    }
+
+    protected void setupConflictingPrepare() throws IOException {
+        // This test represents 2 roughly concurrent requests triggering different N.
+        // Depending on deliver order of messages / where faults occur, outcome will be different.
+
+        long executionId = a.getNextExecutionId();
+        a.sendPrepare(executionId, () -> 99L); // N=1
+        interconnect.drainQueues();
+        a.receiveMessages();
+        b.receiveMessages();
+        c.receiveMessages();
+        b.sendPrepare(executionId, () -> 42L); // N=2
+        interconnect.drainQueues();
+
+        // who should win? A or B?  -> depends on timing of accepts for A vs. promises for B
+
+        c.receiveMessages();
+        b.receiveMessages();
+        a.receiveMessages();
+
+        interconnect.drainQueues();
+
+        // [B] sent <PleaseAccept src='null' executionId='1', N='1' V='42' />
+        // [A] sent <PleaseAccept src='null' executionId='1', N='1' V='99' />
+        // [A] sent <Promise src='null' executionId='1', promiseN='2' priorAcceptedN='-1' priorAcceptedValue='-1' />
     }
 
     @Test
-    public void testConflictingPrepare() throws IOException {
-        long executionId = a.getNextExecutionId();
-        b.sendPrepare(executionId, () -> 42L);
-        a.sendPrepare(executionId, () -> 99L);
-        interconnect.drainQueues();
+    public void testConflictingPrepareSequence1() throws IOException {
+        setupConflictingPrepare();
 
-        // receive prepare, process, send promise
+        // One possible ending sequence:
         a.receiveMessages();
         b.receiveMessages();
         c.receiveMessages();
 
         interconnect.drainQueues();
 
-        // receive promise, send accept
-        c.receiveMessages();
-        b.receiveMessages();
         a.receiveMessages();
+        b.receiveMessages();
+        c.receiveMessages();
 
         interconnect.drainQueues();
 
-        // receive accept
+        a.receiveMessages();
         b.receiveMessages();
         c.receiveMessages();
-        a.receiveMessages();
 
+        // Accepted 99 (depends on delivery order)
+        Assertions.assertTrue(true);
+    }
+
+    @Test
+    public void testConflictingPrepareSequence2() throws IOException {
+        setupConflictingPrepare();
+
+        // alternate ending sequence:
+        b.receiveMessages();
+
+        interconnect.drainQueues();
+
+        b.receiveMessages();
+
+        interconnect.drainQueues();
+
+        a.receiveMessages();
+        b.receiveMessages();
+        c.receiveMessages();
+
+        interconnect.drainQueues();
+
+        a.receiveMessages();
+        b.receiveMessages();
+        c.receiveMessages();
+        // Accepted 42, N=2
+
+        interconnect.drainQueues();
+
+        log.info("receive queue sizes: A: {}, B: {}, C: {}",
+                msgA.getReceiveQueue().size(),
+                msgB.getReceiveQueue().size(),
+                msgC.getReceiveQueue().size());
+
+        // 42 has won, it has been accepted by a majority (A, C), N=2
+
+        // TODO: figure out some better way to make assertions on outcome
+        // Message ordering/delivery depends on implementation of the messaging layer.
+        // This test should not be coupled to that.
+
+        // Perhaps validate message history instead?
+
+        // TODO: Temporary placeholder, this should be removed:
         Assertions.assertTrue(true);
     }
 
     @Test
     public void testOneExecution() throws IOException {
         // send prepare to kick off a round
-        long executionId = a.sendPrepare(this::chooseValue);
+        long executionId = a.sendPrepare(() -> 4L);
         interconnect.drainQueues();
 
         // receive prepare, process, send promise
