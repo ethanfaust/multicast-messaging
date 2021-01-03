@@ -5,6 +5,8 @@ import dev.efaust.collab.liveness.HeartbeatMessage;
 import dev.efaust.collab.liveness.PeerRegistry;
 import dev.efaust.collab.messaging.Message;
 import dev.efaust.collab.messaging.MessagingLayer;
+import dev.efaust.collab.paxos.messages.*;
+import lombok.Getter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.joda.time.DateTime;
@@ -22,7 +24,9 @@ import java.util.function.Supplier;
 public class PaxosNode {
     private static Logger log = LogManager.getLogger(PaxosNode.class);
 
+    @Getter
     private String nodeId;
+
     private MessagingLayer messagingLayer;
     private PeerRegistry peerRegistry;
     int executionId;
@@ -72,8 +76,18 @@ public class PaxosNode {
             PleaseAcceptMessage accept = PleaseAcceptMessage.class.cast(message);
             receiveAccept(accept);
         } else if (message instanceof AcceptedMessage) {
-            // TODO: handle
+            AcceptedMessage accepted = AcceptedMessage.class.cast(message);
+            receiveAccepted(accepted);
+        } else {
+            log.warn("no handler for message type, message {}", message);
         }
+    }
+
+    private void receiveAccepted(AcceptedMessage accepted) {
+        // record Accepted
+        long executionId = accepted.getExecutionId();
+        ExecutionState state = ensureExecutionStateExists(executionId);
+        state.getAcceptedMessages().add(accepted);
     }
 
     private void receivePrepare(PrepareMessage prepare) throws IOException {

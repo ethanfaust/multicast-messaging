@@ -1,10 +1,13 @@
-package dev.efaust.collab.paxos;
+package dev.efaust.collab.paxos.messages;
 
 import dev.efaust.collab.MessageType;
+import dev.efaust.collab.paxos.PaxosMessage;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
 // Negative accept response, indicating that the node has already promised not to accept this value of N
+@EqualsAndHashCode(callSuper = true)
 public class NegativePromiseMessage extends PaxosMessage {
     @Getter @Setter
     private long proposalNumber;

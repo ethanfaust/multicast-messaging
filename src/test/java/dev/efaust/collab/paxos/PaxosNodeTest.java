@@ -6,6 +6,9 @@ import dev.efaust.collab.messaging.InMemoryInterconnect;
 import dev.efaust.collab.messaging.InMemoryMessagingLayer;
 import dev.efaust.collab.messaging.Message;
 import dev.efaust.collab.messaging.MessageHistoryEntry;
+import dev.efaust.collab.paxos.messages.AcceptedMessage;
+import dev.efaust.collab.paxos.messages.PrepareMessage;
+import dev.efaust.collab.paxos.messages.PromiseMessage;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -125,6 +128,37 @@ public class PaxosNodeTest {
         }
     }
 
+    protected int runUntilAllQueuesEmpty(int maxIterations) throws IOException {
+        interconnect.drainQueues();
+
+        int i = 0;
+        for (; i < maxIterations; i++) {
+            a.receiveMessages();
+            b.receiveMessages();
+            c.receiveMessages();
+
+            interconnect.drainQueues();
+
+            if (msgA.getReceiveQueue().isEmpty() &&
+                msgB.getReceiveQueue().isEmpty() &&
+                msgC.getReceiveQueue().isEmpty()) {
+                log.info("receive queues empty after {} iteration(s)", i + 1);
+                return i + 1;
+            }
+        }
+        log.info("reached maximum {} iterations, receive queues not empty", maxIterations);
+        return i;
+    }
+
+    private void logAccepted(long executionId) {
+        for (PaxosNode node : ImmutableSet.of(a, b, c)) {
+            log.info("ACCEPTED for {}:", node.getNodeId());
+            for (AcceptedMessage accepted : node.getExecutionState(executionId).getAcceptedMessages()) {
+                log.info("  {}", accepted);
+            }
+        }
+    }
+
     protected void setupConflictingPrepare() throws IOException {
         // This test represents 2 roughly concurrent requests triggering different N.
         // Depending on deliver order of messages / where faults occur, outcome will be different.
@@ -168,12 +202,17 @@ public class PaxosNodeTest {
 
         interconnect.drainQueues();
 
-        a.receiveMessages();
-        b.receiveMessages();
-        c.receiveMessages();
-
+        int maxIterations = 100;
+        int iterationsRan = runUntilAllQueuesEmpty(maxIterations);
         // Accepted 99 (depends on delivery order)
-        Assertions.assertTrue(true);
+
+        // InMemoryMessagingLayer and InMemoryInterconnect guarantee repeatable results
+        // with no messages reordered or dropped (unless specifically instructed).
+        // Thus this should always finish.
+        Assertions.assertTrue(iterationsRan < maxIterations);
+
+        logAccepted(1);
+        // Assert result 99?
     }
 
     @Test
@@ -182,41 +221,24 @@ public class PaxosNodeTest {
 
         // alternate ending sequence:
         b.receiveMessages();
-
         interconnect.drainQueues();
 
         b.receiveMessages();
-
         interconnect.drainQueues();
 
-        a.receiveMessages();
-        b.receiveMessages();
-        c.receiveMessages();
+        int maxIterations = 100;
+        int iterationsRan = runUntilAllQueuesEmpty(maxIterations);
 
-        interconnect.drainQueues();
+        Assertions.assertTrue(iterationsRan < maxIterations);
 
-        a.receiveMessages();
-        b.receiveMessages();
-        c.receiveMessages();
-        // Accepted 42, N=2
+        // 42 has won, N=2
 
-        interconnect.drainQueues();
-
-        log.info("receive queue sizes: A: {}, B: {}, C: {}",
-                msgA.getReceiveQueue().size(),
-                msgB.getReceiveQueue().size(),
-                msgC.getReceiveQueue().size());
-
-        // 42 has won, it has been accepted by a majority (A, C), N=2
-
+        logAccepted(1);
         // TODO: figure out some better way to make assertions on outcome
         // Message ordering/delivery depends on implementation of the messaging layer.
         // This test should not be coupled to that.
 
         // Perhaps validate message history instead?
-
-        // TODO: Temporary placeholder, this should be removed:
-        Assertions.assertTrue(true);
     }
 
     @Test

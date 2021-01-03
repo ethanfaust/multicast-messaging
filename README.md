@@ -5,6 +5,10 @@ It is a Java CLI program that uses UDP multicast to discover other nodes on the 
 
 Currently multicast messaging works (IPv4 and IPv6). The only messages exchanged are heartbeat messages.
 
+[Basic Paxos](https://en.wikipedia.org/wiki/Paxos_%28computer_science%29#Basic_Paxos) implementation is done (minimum viable product), including basic tests and REPL for interactive testing. Current defects:
+1. subsequent prepare requests are not automatically sent
+2. no detection of quoroum acceptance / authorative transaction log
+
 ## How to build
 ```
 mvn package

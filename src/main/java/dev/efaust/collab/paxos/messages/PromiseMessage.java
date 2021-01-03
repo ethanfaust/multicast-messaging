@@ -1,6 +1,8 @@
-package dev.efaust.collab.paxos;
+package dev.efaust.collab.paxos.messages;
 
 import dev.efaust.collab.MessageType;
+import dev.efaust.collab.paxos.PaxosMessage;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -8,6 +10,7 @@ import lombok.Setter;
  * With a promise message, a node guarantees that it will not accept future proposals with number < N
  * (promiseProposalNumber).
  */
+@EqualsAndHashCode(callSuper = true)
 public class PromiseMessage extends PaxosMessage {
     // TODO: fix this: currently these sentinel values are part of the field
     public static final long NO_PRIOR_ACCEPTED_N = -1;
