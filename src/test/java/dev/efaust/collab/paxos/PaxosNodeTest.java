@@ -12,7 +12,9 @@ import org.apache.logging.log4j.core.config.DefaultConfiguration;
 import org.junit.jupiter.api.*;
 
 import java.io.IOException;
+import java.util.Random;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class PaxosNodeTest {
@@ -72,7 +74,7 @@ public class PaxosNodeTest {
     @Test
     public void testStandardPrepare() throws IOException {
         // send prepare to kick off a round
-        long executionId = a.sendPrepare();
+        long executionId = a.sendPrepare(this::chooseValue);
         interconnect.drainQueues();
 
         // receive prepare, process, send promise
@@ -107,10 +109,44 @@ public class PaxosNodeTest {
         Assertions.assertEquals(ALL, nodesThatSentPromise);
     }
 
+    private long chooseValue() {
+        // TODO: make this something useful
+        return (long)(new Random().nextInt(100));
+    }
+
+    @Test
+    public void testConflictingPrepare() throws IOException {
+        long executionId = a.getNextExecutionId();
+        b.sendPrepare(executionId, () -> 42L);
+        a.sendPrepare(executionId, () -> 99L);
+        interconnect.drainQueues();
+
+        // receive prepare, process, send promise
+        a.receiveMessages();
+        b.receiveMessages();
+        c.receiveMessages();
+
+        interconnect.drainQueues();
+
+        // receive promise, send accept
+        c.receiveMessages();
+        b.receiveMessages();
+        a.receiveMessages();
+
+        interconnect.drainQueues();
+
+        // receive accept
+        c.receiveMessages();
+        b.receiveMessages();
+        a.receiveMessages();
+
+        Assertions.assertTrue(true);
+    }
+
     @Test
     public void testOneExecution() throws IOException {
         // send prepare to kick off a round
-        long executionId = a.sendPrepare();
+        long executionId = a.sendPrepare(this::chooseValue);
         interconnect.drainQueues();
 
         // receive prepare, process, send promise

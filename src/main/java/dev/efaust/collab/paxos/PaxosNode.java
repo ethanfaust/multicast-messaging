@@ -12,6 +12,7 @@ import org.joda.time.DateTimeZone;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.function.Supplier;
 
 /**
  * Implements one Paxos "Processor" (e.g. one machine on a network seeking consensus with other machines on
@@ -82,8 +83,11 @@ public class PaxosNode {
         long priorN = state.getPriorPrepareN();
         log.info("[{}] received prepare, message N: {}, prior N: {}", nodeId, messageN, priorN);
 
-        boolean messageProposalNumberGreaterThanPreviouslyReceived = messageN > priorN;
-        boolean messageFromSelf = nodeId.equals(prepare.getSourceAddress());
+        Optional<Long> priorAcceptedProposalNumber = state.getAccepts().keySet().stream().max(Long::compare);
+        Optional<Long> priorAcceptedProposalValue = Optional.empty();
+        if (priorAcceptedProposalNumber.isPresent()) {
+            priorAcceptedProposalValue = Optional.of(state.getAccepts().get(priorAcceptedProposalNumber.get()));
+        }
 
         if (messageN > priorN) {
             log.info("[{}] message N is greater, making promise", nodeId);
@@ -94,8 +98,8 @@ public class PaxosNode {
             PromiseMessage promise = new PromiseMessage();
             promise.setExecutionId(executionId);
             promise.setPromiseProposalNumber(messageN);
-            promise.setPriorAcceptedProposalNumber(state.getAcceptedN().orElse(PromiseMessage.NO_PRIOR_ACCEPTED_N));
-            promise.setPriorAcceptedValue(state.getAcceptedValue().orElse(PromiseMessage.NO_PRIOR_ACCEPTED_VALUE));
+            promise.setPriorAcceptedProposalNumber(priorAcceptedProposalNumber.orElse(PromiseMessage.NO_PRIOR_ACCEPTED_N));
+            promise.setPriorAcceptedValue(priorAcceptedProposalValue.orElse(PromiseMessage.NO_PRIOR_ACCEPTED_VALUE));
             sendMessage(promise);
         } else {
             log.info("[{}] message N is not greater, not making promise", nodeId);
@@ -105,8 +109,8 @@ public class PaxosNode {
             negativePromise.setExecutionId(executionId);
             negativePromise.setProposalNumber(messageN);
             negativePromise.setPriorPromisedProposalNumber(priorN);
-            negativePromise.setPriorAcceptedProposalNumber(state.getAcceptedN().orElse(PromiseMessage.NO_PRIOR_ACCEPTED_N));
-            negativePromise.setPriorAcceptedValue(state.getAcceptedValue().orElse(PromiseMessage.NO_PRIOR_ACCEPTED_VALUE));
+            negativePromise.setPriorAcceptedProposalNumber(priorAcceptedProposalNumber.orElse(PromiseMessage.NO_PRIOR_ACCEPTED_N));
+            negativePromise.setPriorAcceptedValue(priorAcceptedProposalValue.orElse(PromiseMessage.NO_PRIOR_ACCEPTED_VALUE));
             sendMessage(negativePromise);
         }
     }
@@ -141,8 +145,15 @@ public class PaxosNode {
             valueToAccept = maxPriorAccepted.getPriorAcceptedValue();
         } else {
             log.info("[{}] no max prior accepted, we get to pick the value", nodeId);
-            // TODO: make this something useful
-            valueToAccept = 42L;
+            Optional<Long> valueToAcceptOptional = pickProposedValueToAccept(state);
+            if (!valueToAcceptOptional.isPresent()) {
+                // This node doesn't want to provide a value for this execution.
+                // That's ok, it can do nothing.
+                // Return, don't send any PleaseAccept message.
+                log.info("[{}] we do not want to pick a value, doing nothing", nodeId);
+                return;
+            }
+            valueToAccept = valueToAcceptOptional.get();
         }
 
         PleaseAcceptMessage pleaseAcceptMessage = new PleaseAcceptMessage();
@@ -150,6 +161,19 @@ public class PaxosNode {
         pleaseAcceptMessage.setProposalNumberToAccept(promise.getPromiseProposalNumber());
         pleaseAcceptMessage.setValueToAccept(valueToAccept);
         sendMessage(pleaseAcceptMessage);
+    }
+
+    private Optional<Long> pickProposedValueToAccept(ExecutionState state) {
+        if (state.getDesiredValueOptional().isPresent()) {
+            return state.getDesiredValueOptional();
+        }
+        if (!state.getDesiredValueSupplierOptional().isPresent()) {
+            return Optional.empty();
+        }
+        long desiredValue = state.getDesiredValueSupplierOptional().get().get();
+        Optional<Long> desiredValueOptional = Optional.of(desiredValue);
+        state.setDesiredValueOptional(desiredValueOptional);
+        return desiredValueOptional;
     }
 
     private boolean haveMajorityOfPromises(ExecutionState state) {
@@ -164,6 +188,13 @@ public class PaxosNode {
         return promisesReceived.size() > promisesNotReceived.size();
     }
 
+    private void logPriorAccepts(ExecutionState state) {
+        state.getAccepts().keySet().stream().sorted(Long::compare).forEachOrdered((acceptProposalNumber) -> {
+            long acceptValue = state.getAccepts().get(acceptProposalNumber);
+            log.info("  priorAccept N={} V={}", acceptProposalNumber, acceptValue);
+        });
+    }
+
     private void receiveAccept(PleaseAcceptMessage accept) throws IOException {
         long executionId = accept.getExecutionId();
         ExecutionState state = ensureExecutionStateExists(executionId);
@@ -171,36 +202,47 @@ public class PaxosNode {
         // accept if and only if we have not promised not to
         long proposalNumber = accept.getProposalNumberToAccept();
 
-        // Check promises, make sure there are no conflicts.
-        // Each promise indicates that we should ignore all future proposals with number less than N.
-        // Find conflicts: number > N. Equal N can pass.
-        Optional<PromiseMessage> conflictOptional = state.getPromises().values().stream()
-                .filter((promise) -> promise.getPromiseProposalNumber() > proposalNumber)
-                .findAny();
-        if (conflictOptional.isPresent()) {
-            log.info("[{}] got PleaseAccept n={}, CONFLICT {}, NOT ACCEPTING", nodeId, proposalNumber, conflictOptional.get());
-            return;
+        /*
+        log.info("[{}] receiveAccept proposal number {}", nodeId, proposalNumber);
+        logPriorAccepts(state);
+         */
+
+        // only ever accept a single value per proposal number
+        if (!state.getAccepts().containsKey(proposalNumber)) {
+            // Check promises, make sure there are no conflicts.
+            // Each promise indicates that we should ignore all future proposals with number less than N.
+            // Find conflicts: number > N. Equal N can pass.
+            Optional<PromiseMessage> conflictOptional = state.getPromises().values().stream()
+                    .filter((promise) -> promise.getPromiseProposalNumber() > proposalNumber)
+                    .findAny();
+            if (conflictOptional.isPresent()) {
+                log.info("[{}] got PleaseAccept n={}, CONFLICT {}, NOT ACCEPTING", nodeId, proposalNumber, conflictOptional.get());
+                return;
+            }
+            log.info("[{}] ACCEPT, NO CONFLICT {}", nodeId, accept);
+            for (PromiseMessage promiseMessage : state.getPromises().values()) {
+                log.info("  [{}] prior promise {}", nodeId, promiseMessage);
+            }
+            state.getAccepts().put(proposalNumber, accept.getValueToAccept());
         }
-        log.info("[{}] ACCEPT {}", nodeId, accept);
-        state.setAcceptedN(Optional.of(proposalNumber));
-        state.setAcceptedValue(Optional.of(accept.getValueToAccept()));
 
         AcceptedMessage acceptedMessage = new AcceptedMessage();
         acceptedMessage.setExecutionId(executionId);
         acceptedMessage.setAcceptedProposalNumber(proposalNumber);
-        acceptedMessage.setAcceptedValue(accept.getValueToAccept());
+        acceptedMessage.setAcceptedValue(state.getAccepts().get(proposalNumber));
         sendMessage(acceptedMessage);
     }
 
-    public long sendPrepare() throws IOException {
+    public long sendPrepare(Supplier<Long> desiredValueSupplier) throws IOException {
         long executionId = getNextExecutionId();
-        sendPrepare(executionId);
+        sendPrepare(executionId, desiredValueSupplier);
         return executionId;
     }
 
-    public void sendPrepare(long executionId) throws IOException {
+    public void sendPrepare(long executionId, Supplier<Long> desiredValueSupplier) throws IOException {
         ExecutionState state = ensureExecutionStateExists(executionId);
         long prepareN = state.getPriorPrepareN() + 1;
+        state.setDesiredValueSupplierOptional(Optional.of(desiredValueSupplier));
 
         // this is done on receiving our own message
         //state.setPriorPrepareN(prepareN);
