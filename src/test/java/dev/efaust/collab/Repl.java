@@ -3,6 +3,7 @@ package dev.efaust.collab;
 import dev.efaust.collab.liveness.HeartbeatMessage;
 import dev.efaust.collab.messaging.InMemoryInterconnect;
 import dev.efaust.collab.messaging.InMemoryMessagingLayer;
+import dev.efaust.collab.messaging.MessageHistoryEntry;
 import dev.efaust.collab.messaging.MessagingLayer;
 import dev.efaust.collab.paxos.PaxosNode;
 import org.apache.logging.log4j.Level;
@@ -15,24 +16,18 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class Repl {
-    private static Logger log = LogManager.getLogger(Repl.class);
+    private static final Logger log = LogManager.getLogger(Repl.class);
 
-    private static final String ADDRESS_A = "A";
-    private static final String ADDRESS_B = "B";
-    private static final String ADDRESS_C = "C";
-
-    private InMemoryMessagingLayer msgA;
-    private InMemoryMessagingLayer msgB;
-    private InMemoryMessagingLayer msgC;
-    private PaxosNode a;
-    private PaxosNode b;
-    private PaxosNode c;
     private InMemoryInterconnect interconnect;
+    private Map<Integer, InMemoryMessagingLayer> messagingLayers = new HashMap<>();
+    private Map<Integer, PaxosNode> nodes = new HashMap<>();
 
     public static void main(String[] args) {
         Configurator.initialize(new DefaultConfiguration());
@@ -40,20 +35,17 @@ public class Repl {
         new Repl().run();
     }
 
-    public Repl() {
-
-    }
-
-    private Map<Integer, InMemoryMessagingLayer> messagingLayers = new HashMap<>();
-    private Map<Integer, PaxosNode> nodes = new HashMap<>();
-
     private int getNextNodeId() {
         return nodes.keySet().stream().max(Integer::compare).orElse(0) + 1;
     }
 
+    private String nodeAddress(int nodeId) {
+        return Integer.toString(nodeId);
+    }
+
     public void create() {
         int id = getNextNodeId();
-        String address = Integer.toString(id);
+        String address = nodeAddress(id);
         InMemoryMessagingLayer messagingLayer = new InMemoryMessagingLayer(address);
         PaxosNode node = new PaxosNode(address, messagingLayer);
         nodes.put(id, node);
@@ -70,16 +62,54 @@ public class Repl {
         log.info("heartbeats transmitted from all nodes");
     }
 
-    Pattern PREPARE_COMMAND = Pattern.compile("^([0-9]+).prepare$");
-    public void prepare(Integer nodeId) throws IOException {
-        nodes.get(nodeId).sendPrepare(() -> (long)nodeId);
-        interconnect.drainQueues();
-    }
-
     Pattern STEP_COMMAND = Pattern.compile("^([0-9]+)$");
     public void step(Integer nodeId) throws IOException {
         nodes.get(nodeId).receiveMessages();
         interconnect.drainQueues();
+    }
+
+    Pattern NEW_COMMAND = Pattern.compile("^([0-9]+).new$");
+    public void prepareNew(Integer nodeId) throws IOException {
+        nodes.get(nodeId).sendPrepare(() -> (long)nodeId);
+        interconnect.drainQueues();
+    }
+
+    Pattern PREPARE_COMMAND = Pattern.compile("^([0-9]+).prepare$");
+    public void prepare(Integer nodeId) throws IOException {
+        nodes.get(nodeId).sendPrepare(1, () -> (long)nodeId);
+        interconnect.drainQueues();
+    }
+
+    private void printHistoryEntries(List<MessageHistoryEntry> entries) {
+        int i = 0;
+        for (MessageHistoryEntry entry : entries) {
+            System.out.println(String.format("[%d] %s → %s %s", i, entry.getSrcNode(), entry.getDstNode(), entry.getMessage()));
+            i++;
+        }
+    }
+
+    Pattern SENT_COMMAND = Pattern.compile("^([0-9]+).sent$");
+    public void sent(Integer nodeId) throws IOException {
+        List<MessageHistoryEntry> entries = interconnect.getHistory().stream()
+                .filter((e) -> nodeAddress(nodeId).equals(e.getSrcNode()))
+                .collect(Collectors.toList());
+        printHistoryEntries(entries);
+    }
+
+    Pattern RECEIVED_COMMAND = Pattern.compile("^([0-9]+).received$");
+    public void received(Integer nodeId) throws IOException {
+        List<MessageHistoryEntry> entries = interconnect.getHistory().stream()
+                .filter((e) -> nodeAddress(nodeId).equals(e.getDstNode()))
+                .collect(Collectors.toList());
+        printHistoryEntries(entries);
+    }
+
+    Pattern MESSAGES_COMMAND = Pattern.compile("^([0-9]+).messages$");
+    public void messages(Integer nodeId) throws IOException {
+        List<MessageHistoryEntry> entries = interconnect.getHistory().stream()
+                .filter((e) -> nodeAddress(nodeId).equals(e.getSrcNode()) || nodeAddress(nodeId).equals(e.getDstNode()))
+                .collect(Collectors.toList());
+        printHistoryEntries(entries);
     }
 
     public void help() {
@@ -125,9 +155,21 @@ public class Repl {
                     }
 
                     step(nodeId);
+                } else if ((matcher = NEW_COMMAND.matcher(input)).matches()) {
+                    Integer nodeId = Integer.parseInt(matcher.group(1));
+                    prepareNew(nodeId);
                 } else if ((matcher = PREPARE_COMMAND.matcher(input)).matches()) {
                     Integer nodeId = Integer.parseInt(matcher.group(1));
                     prepare(nodeId);
+                } else if ((matcher = SENT_COMMAND.matcher(input)).matches()) {
+                    Integer nodeId = Integer.parseInt(matcher.group(1));
+                    sent(nodeId);
+                } else if ((matcher = RECEIVED_COMMAND.matcher(input)).matches()) {
+                    Integer nodeId = Integer.parseInt(matcher.group(1));
+                    received(nodeId);
+                } else if ((matcher = MESSAGES_COMMAND.matcher(input)).matches()) {
+                    Integer nodeId = Integer.parseInt(matcher.group(1));
+                    messages(nodeId);
                 }
             } catch (Exception e) {
                 log.error("unhandled exception", e);

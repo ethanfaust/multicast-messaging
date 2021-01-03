@@ -6,6 +6,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.io.ObjectOutputStream;
+import java.nio.ByteBuffer;
 import java.util.Optional;
 
 /**
@@ -38,16 +40,14 @@ public class MessageSerialization {
         MessageType messageType = message.getMessageType();
         // depending on message type, length might vary
 
-        byte[] bytes = new byte[length];
-        for (int i = 0; i < MAGIC.length; i++) {
-            bytes[i] = MAGIC[i];
-        }
-        bytes[MAGIC.length] = VERSION;
-        bytes[MAGIC.length + 1] = messageType.getId();
+        ByteBuffer byteBuffer = ByteBuffer.allocate(length);
+        byteBuffer.put(MAGIC);
+        byteBuffer.put(VERSION);
+        byteBuffer.put(messageType.getId());
 
         // TODO: serialization support for other message types
 
-        return bytes;
+        return byteBuffer.array();
     }
 
     public boolean validate(byte[] bytes) {
