@@ -111,7 +111,9 @@ public class PaxosNode {
             negativePromise.setPriorPromisedProposalNumber(priorN);
             negativePromise.setPriorAcceptedProposalNumber(priorAcceptedProposalNumber.orElse(PromiseMessage.NO_PRIOR_ACCEPTED_N));
             negativePromise.setPriorAcceptedValue(priorAcceptedProposalValue.orElse(PromiseMessage.NO_PRIOR_ACCEPTED_VALUE));
-            sendMessage(negativePromise);
+
+            // TODO: enable in future
+            //sendMessage(negativePromise);
         }
     }
 
@@ -160,7 +162,13 @@ public class PaxosNode {
         pleaseAcceptMessage.setExecutionId(executionId);
         pleaseAcceptMessage.setProposalNumberToAccept(promise.getPromiseProposalNumber());
         pleaseAcceptMessage.setValueToAccept(valueToAccept);
-        sendMessage(pleaseAcceptMessage);
+        // reduce duplicate messages
+        if (!state.getPriorSentPleaseAccept().contains(pleaseAcceptMessage)) {
+            sendMessage(pleaseAcceptMessage);
+        } else {
+            log.info("[{}] not sending duplicate PleaseAccept", nodeId);
+        }
+        state.getPriorSentPleaseAccept().add(pleaseAcceptMessage);
     }
 
     private Optional<Long> pickProposedValueToAccept(ExecutionState state) {
@@ -202,10 +210,8 @@ public class PaxosNode {
         // accept if and only if we have not promised not to
         long proposalNumber = accept.getProposalNumberToAccept();
 
-        /*
         log.info("[{}] receiveAccept proposal number {}", nodeId, proposalNumber);
         logPriorAccepts(state);
-         */
 
         // only ever accept a single value per proposal number
         if (!state.getAccepts().containsKey(proposalNumber)) {
@@ -224,13 +230,13 @@ public class PaxosNode {
                 log.info("  [{}] prior promise {}", nodeId, promiseMessage);
             }
             state.getAccepts().put(proposalNumber, accept.getValueToAccept());
-        }
 
-        AcceptedMessage acceptedMessage = new AcceptedMessage();
-        acceptedMessage.setExecutionId(executionId);
-        acceptedMessage.setAcceptedProposalNumber(proposalNumber);
-        acceptedMessage.setAcceptedValue(state.getAccepts().get(proposalNumber));
-        sendMessage(acceptedMessage);
+            AcceptedMessage acceptedMessage = new AcceptedMessage();
+            acceptedMessage.setExecutionId(executionId);
+            acceptedMessage.setAcceptedProposalNumber(proposalNumber);
+            acceptedMessage.setAcceptedValue(state.getAccepts().get(proposalNumber));
+            sendMessage(acceptedMessage);
+        }
     }
 
     public long sendPrepare(Supplier<Long> desiredValueSupplier) throws IOException {

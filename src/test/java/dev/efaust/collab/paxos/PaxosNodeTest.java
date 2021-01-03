@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableSet;
 import dev.efaust.collab.liveness.HeartbeatMessage;
 import dev.efaust.collab.messaging.InMemoryInterconnect;
 import dev.efaust.collab.messaging.InMemoryMessagingLayer;
+import dev.efaust.collab.messaging.MessageHistoryEntry;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -14,11 +15,10 @@ import org.junit.jupiter.api.*;
 import java.io.IOException;
 import java.util.Random;
 import java.util.Set;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class PaxosNodeTest {
-    private static Logger log = LogManager.getLogger(PaxosNodeTest.class);
+    private static final Logger log = LogManager.getLogger(PaxosNodeTest.class);
 
     private static final String ADDRESS_A = "A";
     private static final String ADDRESS_B = "B";
@@ -86,7 +86,7 @@ public class PaxosNodeTest {
         Set<String> nodesThatReceivedPrepare = interconnect.getHistory().stream()
                 .filter((entry) -> entry.getSrcNode().equals(ADDRESS_A))
                 .filter((entry) -> entry.getMessage() instanceof PrepareMessage)
-                .map((entry) -> entry.getDstNode())
+                .map(MessageHistoryEntry::getDstNode)
                 .collect(Collectors.toSet());
         Assertions.assertEquals(ALL, nodesThatReceivedPrepare);
 
@@ -104,14 +104,14 @@ public class PaxosNodeTest {
         Set<String> nodesThatSentPromise = interconnect.getHistory().stream()
                 .filter((entry) -> entry.getDstNode().equals(ADDRESS_A))
                 .filter((entry) -> entry.getMessage() instanceof PromiseMessage)
-                .map((entry) -> entry.getSrcNode())
+                .map(MessageHistoryEntry::getSrcNode)
                 .collect(Collectors.toSet());
         Assertions.assertEquals(ALL, nodesThatSentPromise);
     }
 
     private long chooseValue() {
         // TODO: make this something useful
-        return (long)(new Random().nextInt(100));
+        return new Random().nextInt(100);
     }
 
     @Test
@@ -136,8 +136,8 @@ public class PaxosNodeTest {
         interconnect.drainQueues();
 
         // receive accept
-        c.receiveMessages();
         b.receiveMessages();
+        c.receiveMessages();
         a.receiveMessages();
 
         Assertions.assertTrue(true);
@@ -188,7 +188,7 @@ public class PaxosNodeTest {
 
         Set<String> nodesThatSentAccepted = interconnect.getHistory().stream()
                 .filter((entry) -> entry.getMessage() instanceof AcceptedMessage)
-                .map((entry) -> entry.getSrcNode())
+                .map(MessageHistoryEntry::getSrcNode)
                 .collect(Collectors.toSet());
         Assertions.assertEquals(ImmutableSet.of(ADDRESS_A, ADDRESS_B, ADDRESS_C), nodesThatSentAccepted);
     }

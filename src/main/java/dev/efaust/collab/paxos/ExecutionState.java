@@ -3,9 +3,7 @@ package dev.efaust.collab.paxos;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.function.Supplier;
 
 public class ExecutionState {
@@ -13,12 +11,14 @@ public class ExecutionState {
     @Getter @Setter
     private long priorPrepareN = 0;
 
-    @Getter @Setter
-    private long acceptorPromiseN = 0;
-
+    // nodeId -> promise
     @Getter
     private Map<String, PromiseMessage> promises;
 
+    @Getter
+    private Set<PleaseAcceptMessage> priorSentPleaseAccept;
+
+    // proposalNumber -> value
     @Getter
     private Map<Long, Long> accepts;
 
@@ -35,6 +35,7 @@ public class ExecutionState {
     public ExecutionState() {
         this.priorPrepareN = 0;
         this.promises = new HashMap<>();
+        this.priorSentPleaseAccept = new HashSet<>();
         this.accepts = new HashMap<>();
     }
 }
