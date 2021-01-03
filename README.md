@@ -1,17 +1,25 @@
 ## What is this?
 This software is a work in progress.
 
-It is a Java CLI program that uses UDP multicast to discover other nodes on the same local network running the software, and then communicate with them. The intent is to use the messaging to implement a distributed consensus protocol (e.g. Paxos).
+It is a Java CLI program that uses UDP multicast to discover other nodes on the same local network running the software, and then communicate with them. The messaging layer is used to run a distributed consensus protocol ([Paxos](https://en.wikipedia.org/wiki/Paxos_%28computer_science%29)).
 
+## Status
+
+### Messaging
 Currently multicast messaging works (IPv4 and IPv6). The only messages exchanged are heartbeat messages.
 
+### Paxos
 [Basic Paxos](https://en.wikipedia.org/wiki/Paxos_%28computer_science%29#Basic_Paxos) implementation is done (minimum viable product), including basic tests and REPL for interactive testing.
 
-Current defects:
+### Current defects
 1. The UDP messaging layer does not yet support serialization of all message types (not yet implemented)
-2. subsequent prepare requests are not automatically sent
-3. no detection of quorum acceptance / authorative transaction log
+2. Subsequent prepare requests are not automatically sent
+3. No detection of quorum acceptance / authorative transaction log
+   ```
    "An Acceptor can accept multiple proposals... This can happen when another Proposer, unaware of the new value being decided, starts a new round with a higher identification number n... These proposals may even have different values"
+   ```
+   (see ```PaxosNodeTest.testConflictingPrepareSequence2```)
+4. Heartbeats are currently used for discovery but there is no threshold/logic for failure detection
 
 ## How to build
 ```
