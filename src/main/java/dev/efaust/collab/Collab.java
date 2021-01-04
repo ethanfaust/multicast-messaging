@@ -1,10 +1,12 @@
 package dev.efaust.collab;
 
 import dev.efaust.collab.liveness.HeartbeatMessage;
+import dev.efaust.collab.liveness.IpTracker;
 import dev.efaust.collab.liveness.PeerRegistry;
 import dev.efaust.collab.messaging.Message;
 import dev.efaust.collab.messaging.MessageSerialization;
 import dev.efaust.collab.messaging.MulticastUDPMessagingLayer;
+import dev.efaust.collab.messaging.NamedThreadFactory;
 import dev.efaust.collab.paxos.PaxosNode;
 import org.apache.commons.cli.*;
 import org.apache.logging.log4j.Level;
@@ -16,6 +18,7 @@ import org.joda.time.DateTime;
 
 import java.io.IOException;
 import java.util.Queue;
+import java.util.Random;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -35,8 +38,8 @@ public class Collab {
     // https://en.wikipedia.org/wiki/Multicast_address#IPv6
     private static final String IPV6_DEFAULT_ADDRESS = "ff02::1";
 
-    long DISCOVERY_PERIOD_MILLIS = TimeUnit.SECONDS.toMillis(3);
-    String SERVICE_NAME = "Collab";
+    private static long DISCOVERY_PERIOD_MILLIS = TimeUnit.SECONDS.toMillis(3);
+    private static String SERVICE_NAME = "Collab";
 
     public static void main(String[] args) {
         log.info("Hello!");
@@ -47,6 +50,16 @@ public class Collab {
         } catch (Exception e) {
             log.error("Unhandled exception", e);
         }
+    }
+
+    private final Random random;
+    private MulticastUDPMessagingLayer multicast;
+    private PaxosNode paxosNode;
+    private final AtomicBoolean started = new AtomicBoolean(false);
+    private IpTracker ipTracker;
+
+    public Collab() {
+        random = new Random();
     }
 
     // Paxos via multicast
@@ -100,34 +113,19 @@ public class Collab {
         execute(multicastGroupAddress, port);
     }
 
-    public void execute(String ip, int port) throws IOException {
-        MessageSerialization messageSerialization = new MessageSerialization();
-        MulticastUDPMessagingLayer multicast = new MulticastUDPMessagingLayer(ip, port, messageSerialization);
+    private void receivedHeartbeat(HeartbeatMessage heartbeat) {
+        ipTracker.receivedHeartbeat(heartbeat);
+    }
 
-        // TODO: use hostname, ip, or (host, startupTime) as nodeId
-        PaxosNode paxosNode = new PaxosNode("A", multicast);
-
-        multicast.setup();
-
-        log.info("starting receive thread");
-        Thread receiveThread = new Thread() {
+    private Runnable getSendRunnable() {
+        return new Runnable() {
             @Override
             public void run() {
-                setName("receive");
-                multicast.run();
-            }
-        };
-        receiveThread.start();
-        log.info("receive thread started");
-
-        log.info("starting send thread");
-        Thread sendThread = new Thread(){
-            @Override
-            public void run() {
-                setName("send");
                 while (true) {
                     try {
-                        Message heartbeat = new HeartbeatMessage();
+                        HeartbeatMessage heartbeat = new HeartbeatMessage();
+                        heartbeat.setUuid(random.nextLong());
+                        ipTracker.aboutToSendHeartbeat(heartbeat);
                         multicast.send(heartbeat);
                         log.debug("sent");
                     } catch (IOException e) {
@@ -141,26 +139,16 @@ public class Collab {
                 }
             }
         };
-        sendThread.start();
-        log.info("send thread started");
+    }
 
-        ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread thread = new Thread(r);
-                thread.setName("report");
-                return thread;
-            }
-        });
-
-        final AtomicBoolean started = new AtomicBoolean(false);
-        Runnable reporter = new Runnable() {
+    private Runnable getReportPeerListRunnable() {
+        return new Runnable() {
             @Override
             public void run() {
                 log.info("peer list");
                 PeerRegistry peerRegistry = paxosNode.getPeerRegistry();
                 for (String peer : peerRegistry.getPeers()) {
-                    DateTime lastHeartbeat = peerRegistry.getLastHeartbeatForPeer(peer);
+                    DateTime lastHeartbeat = peerRegistry.getLastHeartbeatTimeForPeer(peer);
                     log.info("peer {} last heartbeat {}", peer, lastHeartbeat);
                 }
                 if (peerRegistry.getPeers().size() > 0 && !started.get()) {
@@ -173,16 +161,54 @@ public class Collab {
                 }
             }
         };
-        scheduledExecutorService.scheduleAtFixedRate(reporter, 0, 30, TimeUnit.SECONDS);
+    }
 
+    public void execute(String ip, int port) throws IOException {
+        MessageSerialization messageSerialization = new MessageSerialization();
+        multicast = new MulticastUDPMessagingLayer(ip, port, messageSerialization);
+        paxosNode = new PaxosNode("localhost", multicast);
+        multicast.setup();
+
+        // TODO: this will affect the whole round, probably need to find a better solution
+        ipTracker = new IpTracker((String determinedIp) -> paxosNode.setNodeId(determinedIp));
+
+        log.info("starting receive packets thread");
+        NamedThreadFactory receiveThreadFactory = new NamedThreadFactory("receive");
+        Thread receivePacketsThread = receiveThreadFactory.newThread(() -> multicast.run());
+        receivePacketsThread.start();
+        log.info("receive thread started");
+
+        log.info("starting send thread");
+        Thread sendThread = new Thread(getSendRunnable());
+        sendThread.setName("send");
+        sendThread.start();
+        log.info("send thread started");
+
+        ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("report"));
+        scheduledExecutorService.scheduleAtFixedRate(getReportPeerListRunnable(), 0, 10, TimeUnit.SECONDS);
+
+        // runs in main thread
+        handlePaxosMessagesLoop();
+    }
+
+    private void handlePaxosMessagesLoop() throws IOException {
         Queue<Message> receiveQueue = multicast.getReceiveQueue();
         while (true) {
             Message message = receiveQueue.poll();
             if (message != null) {
                 log.debug("received message {} from {}", message, message.getSourceAddress());
-                paxosNode.receiveMessage(message);
+                if (message instanceof HeartbeatMessage) {
+                    HeartbeatMessage heartbeat = HeartbeatMessage.class.cast(message);
+                    receivedHeartbeat(heartbeat);
+                }
+                try {
+                    paxosNode.receiveMessage(message);
+                } catch (IOException e) {
+                    log.error("error receiving message {}", message, e);
+                }
             }
             try {
+                // don't spin CPU polling for messages
                 Thread.sleep(10);
             } catch (InterruptedException e) {
                 // ignore

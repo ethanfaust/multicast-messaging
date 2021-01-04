@@ -21,7 +21,7 @@ public class PeerRegistry {
         return peerLastHeartbeatTime.keySet();
     }
 
-    public DateTime getLastHeartbeatForPeer(String peer) {
+    public DateTime getLastHeartbeatTimeForPeer(String peer) {
         return peerLastHeartbeatTime.get(peer);
     }
 

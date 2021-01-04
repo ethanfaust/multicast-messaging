@@ -76,7 +76,8 @@ public class MessageSerialization {
             }
             // TODO: serialization support for NegativePromise and other message types
         } else if (message instanceof HeartbeatMessage) {
-            // nothing to encode (yet)
+            HeartbeatMessage heartbeatMessage = HeartbeatMessage.class.cast(message);
+            byteBuffer.putLong(heartbeatMessage.getUuid());
         } else {
             throw new RuntimeException(String.format("serialize called for unknown message type, message %s", message));
         }
@@ -107,7 +108,9 @@ public class MessageSerialization {
             }
             switch (messageType.get()) {
                 case Heartbeat:
-                    message = Optional.of(new HeartbeatMessage());
+                    HeartbeatMessage heartbeatMessage = new HeartbeatMessage();
+                    heartbeatMessage.setUuid(byteBuffer.getLong());
+                    message = Optional.of(heartbeatMessage);
                     break;
                 case Prepare:
                     PrepareMessage prepareMessage = new PrepareMessage();

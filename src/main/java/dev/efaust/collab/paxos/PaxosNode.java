@@ -7,6 +7,7 @@ import dev.efaust.collab.messaging.Message;
 import dev.efaust.collab.messaging.MessagingLayer;
 import dev.efaust.collab.paxos.messages.*;
 import lombok.Getter;
+import lombok.Setter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.joda.time.DateTime;
@@ -24,7 +25,7 @@ import java.util.function.Supplier;
 public class PaxosNode {
     private static final Logger log = LogManager.getLogger(PaxosNode.class);
 
-    @Getter
+    @Getter @Setter
     private String nodeId;
 
     private MessagingLayer messagingLayer;

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
 import java.util.Optional;
 
 
@@ -22,17 +23,17 @@ public class MessageSerializationTest {
     @Test
     public void testSerializationBasics() {
         HeartbeatMessage heartbeatMessage = new HeartbeatMessage();
+        heartbeatMessage.setUuid(42);
         byte[] bytes = messageSerialization.serialize(heartbeatMessage);
 
-        // magic + version 0 + message type 0
-        byte[] expected = new byte[MessageSerialization.MAGIC.length + 2];
-        for (int i = 0; i < MessageSerialization.MAGIC.length; i++) {
-            expected[i] = MessageSerialization.MAGIC[i];
-        }
-        expected[MessageSerialization.MAGIC.length] = MessageSerialization.VERSION;
-        expected[MessageSerialization.MAGIC.length] = MessageType.Heartbeat.getId();
+        // magic + (version 0 + message type 0) + uuid
+        ByteBuffer expected = ByteBuffer.allocate(MessageSerialization.MAGIC.length + 2 + 8);
+        expected.put(MessageSerialization.MAGIC);
+        expected.put(MessageSerialization.VERSION);
+        expected.put(MessageType.Heartbeat.getId());
+        expected.putLong(42);
 
-        Assertions.assertArrayEquals(expected, bytes);
+        Assertions.assertArrayEquals(expected.array(), bytes);
     }
 
     @Test

@@ -9,6 +9,10 @@ import lombok.Setter;
 import java.util.*;
 import java.util.function.Supplier;
 
+/**
+ * State for one node, for one execution of Paxos. This execution might involve multiple proposals
+ * (e.g. prepare -> promise -> accept -> accepted) until the cluster reaches consensus.
+ */
 public class ExecutionState {
     // prepare: The number n must be greater than any number used in any of the previous Prepare messages by this Proposer.
     @Getter @Setter
