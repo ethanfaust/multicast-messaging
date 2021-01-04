@@ -76,7 +76,7 @@ public class MulticastUDPMessagingLayer implements MessagingLayer, Runnable {
         }
     }
 
-    protected void shutdown() throws IOException {
+    protected synchronized void shutdown() throws IOException {
         socket.leaveGroup(socketAddress, null);
         socket.close();
     }
@@ -104,6 +104,7 @@ public class MulticastUDPMessagingLayer implements MessagingLayer, Runnable {
     }
 
     public void send(Message message) throws IOException {
+        log.info("send {}", message);
         byte[] bytes = serializationLayer.serialize(message);
         send(bytes);
     }

@@ -2,12 +2,18 @@ package dev.efaust.collab.messaging;
 
 import dev.efaust.collab.MessageType;
 import dev.efaust.collab.liveness.HeartbeatMessage;
+import dev.efaust.collab.paxos.PaxosMessage;
+import dev.efaust.collab.paxos.messages.AcceptedMessage;
+import dev.efaust.collab.paxos.messages.PleaseAcceptMessage;
+import dev.efaust.collab.paxos.messages.PrepareMessage;
+import dev.efaust.collab.paxos.messages.PromiseMessage;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Optional;
 
 /**
@@ -40,14 +46,41 @@ public class MessageSerialization {
         MessageType messageType = message.getMessageType();
         // depending on message type, length might vary
 
-        ByteBuffer byteBuffer = ByteBuffer.allocate(length);
+        ByteBuffer byteBuffer = ByteBuffer.allocate(256);
         byteBuffer.put(MAGIC);
         byteBuffer.put(VERSION);
         byteBuffer.put(messageType.getId());
 
-        // TODO: serialization support for other message types
+        if (message instanceof PaxosMessage) {
+            PaxosMessage paxosMessage = PaxosMessage.class.cast(message);
+            byteBuffer.putLong(paxosMessage.getExecutionId());
 
-        return byteBuffer.array();
+            if (message instanceof PrepareMessage) {
+                PrepareMessage prepareMessage = PrepareMessage.class.cast(message);
+                byteBuffer.putLong(prepareMessage.getProposalNumber());
+            } else if (message instanceof PromiseMessage) {
+                PromiseMessage promiseMessage = PromiseMessage.class.cast(message);
+                byteBuffer.putLong(promiseMessage.getPromiseProposalNumber());
+                byteBuffer.putLong(promiseMessage.getPriorAcceptedProposalNumber());
+                byteBuffer.putLong(promiseMessage.getPriorAcceptedValue());
+            } else if (message instanceof PleaseAcceptMessage) {
+                PleaseAcceptMessage pleaseAcceptMessage = PleaseAcceptMessage.class.cast(message);
+                byteBuffer.putLong(pleaseAcceptMessage.getProposalNumberToAccept());
+                byteBuffer.putLong(pleaseAcceptMessage.getValueToAccept());
+            } else if (message instanceof AcceptedMessage) {
+                AcceptedMessage acceptedMessage = AcceptedMessage.class.cast(message);
+                byteBuffer.putLong(acceptedMessage.getAcceptedProposalNumber());
+                byteBuffer.putLong(acceptedMessage.getAcceptedValue());
+            } else {
+                throw new RuntimeException(String.format("serialize called for unknown paxos message type, message %s", message));
+            }
+            // TODO: serialization support for NegativePromise and other message types
+        } else if (message instanceof HeartbeatMessage) {
+            // nothing to encode (yet)
+        } else {
+            throw new RuntimeException(String.format("serialize called for unknown message type, message %s", message));
+        }
+        return Arrays.copyOf(byteBuffer.array(), byteBuffer.position());
     }
 
     public boolean validate(byte[] bytes) {
@@ -62,13 +95,49 @@ public class MessageSerialization {
             return Optional.empty();
         }
         Optional<Message> message = Optional.empty();
+        ByteBuffer byteBuffer = ByteBuffer.wrap(bytes);
         try {
-            MessageType messageType = getMessageType(bytes);
-            switch (messageType) {
+            byteBuffer.position(MAGIC.length);
+            byte version = byteBuffer.get();
+            byte messageTypeByte = byteBuffer.get();
+
+            Optional<MessageType> messageType = MessageType.messageTypeFromId(messageTypeByte);
+            if (!messageType.isPresent()) {
+                throw new IOException(String.format("could not determine message type for value %d", messageTypeByte));
+            }
+            switch (messageType.get()) {
                 case Heartbeat:
                     message = Optional.of(new HeartbeatMessage());
                     break;
-                // TODO: add support for deserializing other message types
+                case Prepare:
+                    PrepareMessage prepareMessage = new PrepareMessage();
+                    prepareMessage.setExecutionId(byteBuffer.getLong());
+                    prepareMessage.setProposalNumber(byteBuffer.getLong());
+                    message = Optional.of(prepareMessage);
+                    break;
+                case Promise:
+                    PromiseMessage promiseMessage = new PromiseMessage();
+                    promiseMessage.setExecutionId(byteBuffer.getLong());
+                    promiseMessage.setPromiseProposalNumber(byteBuffer.getLong());
+                    promiseMessage.setPriorAcceptedProposalNumber(byteBuffer.getLong());
+                    promiseMessage.setPriorAcceptedValue(byteBuffer.getLong());
+                    message = Optional.of(promiseMessage);
+                    break;
+                case PleaseAccept:
+                    PleaseAcceptMessage pleaseAcceptMessage = new PleaseAcceptMessage();
+                    pleaseAcceptMessage.setExecutionId(byteBuffer.getLong());
+                    pleaseAcceptMessage.setProposalNumberToAccept(byteBuffer.getLong());
+                    pleaseAcceptMessage.setValueToAccept(byteBuffer.getLong());
+                    message = Optional.of(pleaseAcceptMessage);
+                    break;
+                case Accepted:
+                    AcceptedMessage acceptedMessage = new AcceptedMessage();
+                    acceptedMessage.setExecutionId(byteBuffer.getLong());
+                    acceptedMessage.setAcceptedProposalNumber(byteBuffer.getLong());
+                    acceptedMessage.setAcceptedValue(byteBuffer.getLong());
+                    message = Optional.of(acceptedMessage);
+                    break;
+                // TODO: add support for deserializing other message types, e.g. NegativePromiseMessage
             }
         } catch (IOException e) {
             log.warn("failed to deserialize message", e);

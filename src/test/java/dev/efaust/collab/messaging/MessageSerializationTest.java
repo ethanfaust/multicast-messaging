@@ -3,9 +3,12 @@ package dev.efaust.collab.messaging;
 import dev.efaust.collab.MessageType;
 import dev.efaust.collab.liveness.HeartbeatMessage;
 import dev.efaust.collab.messaging.MessageSerialization;
+import dev.efaust.collab.paxos.messages.PrepareMessage;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.Optional;
 
 
 public class MessageSerializationTest {
@@ -17,7 +20,7 @@ public class MessageSerializationTest {
     }
 
     @Test
-    public void testSerialization() {
+    public void testSerializationBasics() {
         HeartbeatMessage heartbeatMessage = new HeartbeatMessage();
         byte[] bytes = messageSerialization.serialize(heartbeatMessage);
 
@@ -30,5 +33,19 @@ public class MessageSerializationTest {
         expected[MessageSerialization.MAGIC.length] = MessageType.Heartbeat.getId();
 
         Assertions.assertArrayEquals(expected, bytes);
+    }
+
+    @Test
+    public void testPrepareSerialization() {
+        PrepareMessage prepareMessage = new PrepareMessage();
+        prepareMessage.setExecutionId(1);
+        prepareMessage.setProposalNumber(42);
+        byte[] bytes = messageSerialization.serialize(prepareMessage);
+        Optional<Message> received = messageSerialization.deserialize(bytes);
+        Assertions.assertTrue(received.isPresent());
+        Assertions.assertTrue(received.get() instanceof PrepareMessage);
+        PrepareMessage receivedPrepare = PrepareMessage.class.cast(received.get());
+        Assertions.assertEquals(1, receivedPrepare.getExecutionId());
+        Assertions.assertEquals(42, receivedPrepare.getProposalNumber());
     }
 }

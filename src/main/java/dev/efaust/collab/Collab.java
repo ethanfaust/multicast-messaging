@@ -17,6 +17,7 @@ import org.joda.time.DateTime;
 import java.io.IOException;
 import java.util.Queue;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Collab {
     private static Logger log = LogManager.getLogger(Collab.class);
@@ -151,6 +152,8 @@ public class Collab {
                 return thread;
             }
         });
+
+        final AtomicBoolean started = new AtomicBoolean(false);
         Runnable reporter = new Runnable() {
             @Override
             public void run() {
@@ -159,6 +162,14 @@ public class Collab {
                 for (String peer : peerRegistry.getPeers()) {
                     DateTime lastHeartbeat = peerRegistry.getLastHeartbeatForPeer(peer);
                     log.info("peer {} last heartbeat {}", peer, lastHeartbeat);
+                }
+                if (peerRegistry.getPeers().size() > 0 && !started.get()) {
+                    started.set(true);
+                    try {
+                        paxosNode.sendPrepare(() -> 4L);
+                    } catch (IOException e) {
+                        log.error("failed to send prepare", e);
+                    }
                 }
             }
         };

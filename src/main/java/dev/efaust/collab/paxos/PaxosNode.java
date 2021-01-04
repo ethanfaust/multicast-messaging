@@ -22,7 +22,7 @@ import java.util.function.Supplier;
  * Paxos ref: https://en.wikipedia.org/wiki/Paxos_%28computer_science%29#Basic_Paxos
  */
 public class PaxosNode {
-    private static Logger log = LogManager.getLogger(PaxosNode.class);
+    private static final Logger log = LogManager.getLogger(PaxosNode.class);
 
     @Getter
     private String nodeId;
@@ -45,7 +45,7 @@ public class PaxosNode {
         return executionStates.keySet().stream().max(Long::compare).orElse(0L) + 1;
     }
 
-    public void receiveMessages() throws IOException {
+    public void receiveMessages() {
         while (true) {
             Message message = messagingLayer.getReceiveQueue().poll();
             if (message == null) {
@@ -152,7 +152,7 @@ public class PaxosNode {
         }
         Optional<PromiseMessage> maxPriorAcceptedOptional = state.getPromises().values().stream()
                 .filter((p) -> p.getPriorAcceptedProposalNumber() != PromiseMessage.NO_PRIOR_ACCEPTED_N)
-                .max(Comparator.comparingLong((p) -> p.getPriorAcceptedProposalNumber()));
+                .max(Comparator.comparingLong(PromiseMessage::getPriorAcceptedProposalNumber));
 
         long valueToAccept;
         if (maxPriorAcceptedOptional.isPresent()) {

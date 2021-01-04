@@ -12,14 +12,13 @@ Currently multicast messaging works (IPv4 and IPv6). The only messages exchanged
 [Basic Paxos](https://en.wikipedia.org/wiki/Paxos_%28computer_science%29#Basic_Paxos) implementation is done (minimum viable product), including basic tests and REPL for interactive testing.
 
 ### Current defects
-1. The UDP messaging layer does not yet support serialization of all message types (not yet implemented)
-2. Subsequent prepare requests are not automatically sent
-3. No detection of quorum acceptance / authorative transaction log
+1. Subsequent prepare requests are not automatically sent
+2. No detection of quorum acceptance / authorative transaction log
    ```
    "An Acceptor can accept multiple proposals... This can happen when another Proposer, unaware of the new value being decided, starts a new round with a higher identification number n... These proposals may even have different values"
    ```
    (see ```PaxosNodeTest.testConflictingPrepareSequence2```)
-4. Heartbeats are currently used for discovery but there is no threshold/logic for failure detection
+3. Heartbeats are currently used for discovery but there is no threshold/logic for failure detection
 
 ## How to build
 ```
